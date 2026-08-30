@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Substack Archive</title>
+
+<style>
+    body {
+        font-family: Georgia, serif;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 30px 20px;
+        color: #222;
+        line-height: 1.6;
+        background: #fff;
+    }
+
+    h1 {
+        font-size: 2.2em;
+        margin-bottom: 5px;
+    }
+
+    .subtitle {
+        color: #666;
+        margin-bottom: 25px;
+    }
+
+    #search {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px;
+        font-size: 16px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        margin-bottom: 25px;
+    }
+
+    .post {
+        border-bottom: 1px solid #ddd;
+        padding: 0 0 22px;
+        margin-bottom: 22px;
+    }
+
+    .post h2 {
+        margin: 0 0 5px;
+        font-size: 1.4em;
+    }
+
+    .post h2 a {
+        color: #222;
+        text-decoration: none;
+    }
+
+    .post h2 a:hover {
+        text-decoration: underline;
+    }
+
+    .date {
+        color: #777;
+        font-size: 0.9em;
+        margin-bottom: 8px;
+    }
+
+    .description {
+        color: #444;
+    }
+
+    .description img {
+        max-width: 100%;
+        height: auto;
+    }
+
+    #status {
+        color: #777;
+        margin: 20px 0;
+    }
+
+    .error {
+        color: #a00;
+        background: #f9eeee;
+        padding: 15px;
+        border-radius: 5px;
+    }
+</style>
+</head>
+
+<body>
+
+<h1>Substack Archive</h1>
+<div class="subtitle">Browse the complete archive</div>
+
+<input
+    type="text"
+    id="search"
+    placeholder="Search posts by title or text..."
+>
+
+<div id="status">Loading archive…</div>
+<div id="posts"></div>
+
+<script>
+const RSS_FILE = "substack_full_archive_rss.xml";
+
+let allPosts = [];
+
+function cleanHTML(html) {
+    const temp = document.createElement("div");
+    temp.innerHTML = html || "";
+    return temp.textContent || temp.innerText || "";
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+
+    if (isNaN(date)) {
+        return "";
+    }
+
+    return date.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "long",
+        day: "numeric"
+    });
+}
+
+function renderPosts(posts) {
+    const container = document.getElementById("posts");
+
+    if (posts.length === 0) {
+        container.innerHTML = "<p>No posts found.</p>";
+        return;
+    }
+
+    container.innerHTML = posts.map(post => `
+        <article class="post">
+            <h2>
+                <a href="${post.link}" target="_blank" rel="noopener">
+                    ${escapeHTML(post.title)}
+                </a>
+            </h2>
+
+            <div class="date">
+                ${formatDate(post.date)}
+            </div>
+
+            <div class="description">
+                ${post.description}
+            </div>
+        </article>
+    `).join("");
+}
+
+function escapeHTML(text) {
+    return String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+fetch(RSS_FILE)
+    .then(response => {
+        if (!response.ok) {
+            throw new Error("Could not load the RSS archive.");
+        }
+        return response.text();
+    })
+    .then(xmlText => {
+
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(xmlText, "text/xml");
+
+        const items = Array.from(xml.querySelectorAll("item"));
+
+        allPosts = items.map(item => {
+
+            const title =
+                item.querySelector("title")?.textContent || "Untitled";
+
+            const link =
+                item.querySelector("link")?.textContent || "#";
+
+            const date =
+                item.querySelector("pubDate")?.textContent || "";
+
+            const description =
+                item.querySelector("description")?.textContent || "";
+
+            return {
+                title,
+                link,
+                date,
+                description
+            };
+
+        });
+
+        allPosts.sort((a, b) =>
+            new Date(b.date) - new Date(a.date)
+        );
+
+        document.getElementById("status").textContent =
+            `${allPosts.length} posts in the archive`;
+
+        renderPosts(allPosts);
+    })
+    .catch(error => {
+
+        document.getElementById("status").innerHTML =
+            `<div class="error">
+                I couldn't load the archive file.
+                <br><br>
+                ${escapeHTML(error.message)}
+            </div>`;
+    });
+
+document.getElementById("search").addEventListener("input", function() {
+
+    const searchTerm = this.value.toLowerCase().trim();
+
+    if (!searchTerm) {
+        renderPosts(allPosts);
+        return;
+    }
+
+    const filtered = allPosts.filter(post => {
+
+        const searchableText =
+            (
+                post.title + " " +
+                cleanHTML(post.description)
+            ).toLowerCase();
+
+        return searchableText.includes(searchTerm);
+    });
+
+    renderPosts(filtered);
+});
+</script>
+
+</body>
+</html>
